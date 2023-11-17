@@ -291,8 +291,8 @@ if __name__ == "__main__":
     api_key:str = loadAPI()
     folder_path = os.path.join(os.getcwd(),"tv shows")
 
-    #ert:ERT = ERT(api_key)
-    #ert.TESTING(folder_path)
+    ert:ERT = ERT(api_key)
+    ert.TESTING(folder_path)
 
 
 
