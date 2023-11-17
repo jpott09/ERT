@@ -4,6 +4,39 @@ import re as regex
 import time
 from typing import List, Dict
 
+# ------------------------- Classes ------------------------- //FILE OBJECTS
+class FileObject:
+    def __init__(self,name:str):
+        self.name:str = name
+        self.children:List[FileObject] = []
+
+    def getName(self) -> str:
+        return self.name
+    
+    def addChild(self,child:object):    
+        self.children.append(child)
+    
+    def getChildren(self) -> List[object]:
+        return self.children
+    
+class Episode(FileObject):
+    def __init__(self,name:str):
+        super().__init__(name)
+
+class Season(FileObject):
+    def __init__(self,name:str):
+        super().__init__(name)
+    
+    def getChildren(self) -> List[Episode]:
+        return super().getChildren()
+    
+class Series(FileObject):
+    def __init__(self,name:str):
+        super().__init__(name)
+        
+    def getChildren(self) -> List[Season]:
+        return super().getChildren()
+# ------------------------- Classes ------------------------- //ERT
 class ERT:
     def __init__(self,api_key:str, logging:bool = True):
         # main variables
@@ -33,6 +66,9 @@ class ERT:
         self.full_logs:List[str] = []
         #questionable_matches
         self.possibly_formatted_episodes:List[str] = []
+
+        #class lists
+        self.series_list:List[Series] = []
 
 
     def getTimestamp(self) -> str:
@@ -198,5 +234,62 @@ class ERT:
     def removeDoubleSpaces(self,string:str) -> str:
         """Removes double spaces from a string"""
         return string.replace("  "," ")
+    
+    def generateSeriesData(self,root_folder:str) -> True or False:
+        if not os.path.exists(root_folder):
+            self.logError(f"Root folder '{root_folder}' does not exist")
+            return False
+        #get the series folders
+        series_folders:List[str] = os.listdir(root_folder)
+        #create a list of series objects
+        series_list:List[Series] = []
+        #iterate the series folders
+        for series_folder in series_folders:
+            #create a series object
+            series:Series = Series(series_folder)
+            #get the season folders
+            season_folders:List[str] = os.listdir(os.path.join(root_folder,series_folder))
+            #iterate the season folders
+            for season_folder in season_folders:
+                #create a season object
+                season:Season = Season(season_folder)
+                #get the episode files
+                episode_files:List[str] = os.listdir(os.path.join(root_folder,series_folder,season_folder))
+                #iterate the episode files
+                for episode_file in episode_files:
+                    #create an episode object
+                    episode:Episode = Episode(episode_file)
+                    #add the episode to the season
+                    season.addChild(episode)
+                #add the season to the series
+                series.addChild(season)
+            #add the series to the series list
+            series_list.append(series)
+        self.series_list.clear()
+        self.series_list = series_list
+        return True
+    
+    def TESTING(self,root_folder:str):
+        print(f"TESTING: against {root_folder}")
+        self.generateSeriesData(root_folder)
+        for series in self.series_list:
+            series_name:str = series.getName()
+            formatted_series_name:str = self.formatSeriesName(series_name)
+            print(f"{series_name} -> {formatted_series_name}")
+            # TODO add functions to get the series season count from API
+            # check that series names all are valid for the API
+
+
+
+    
+#if name = main for testing
+if __name__ == "__main__":
+    import os
+    api_key:str = "6549463d223be920a83a50572d0e3db0"
+    folder_path = os.path.join(os.getcwd(),"tv shows")
+
+    ert:ERT = ERT(api_key)
+    ert.TESTING(folder_path)
+
 
 
