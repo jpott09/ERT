@@ -5,7 +5,13 @@ import time
 
 
 # Set your API key
-api_key = '6549463d223be920a83a50572d0e3db0'
+api_key = ""
+with open("api_key.txt","r") as file:
+    api_key = file.read().strip()
+if not api_key:
+    print("No API key found")
+    exit(1)
+    
 base_url = 'https://api.themoviedb.org/3'
 tv_root_folder = 'D:\\tv shows'
 series_start_letter = None   #use if a scan was incomplete

@@ -280,16 +280,19 @@ class ERT:
             # check that series names all are valid for the API
 
 
-
+def loadAPI():
+    with open("api_key.txt","r") as file:
+        api_key = file.read().strip()
+    return api_key
     
 #if name = main for testing
 if __name__ == "__main__":
     import os
-    api_key:str = "6549463d223be920a83a50572d0e3db0"
+    api_key:str = loadAPI()
     folder_path = os.path.join(os.getcwd(),"tv shows")
 
-    ert:ERT = ERT(api_key)
-    ert.TESTING(folder_path)
+    #ert:ERT = ERT(api_key)
+    #ert.TESTING(folder_path)
 
 
 
