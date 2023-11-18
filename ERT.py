@@ -3,25 +3,57 @@ import os
 import re as regex
 import time
 from typing import List, Dict
+import pickle
 
 # ------------------------- Classes ------------------------- //FILE OBJECTS
 class FileObject:
     def __init__(self,name:str):
         self.name:str = name
+        self.tmdb_id:str = ""
+        self.formatted_name:str = name
         self.children:List[FileObject] = []
 
     def getName(self) -> str:
         return self.name
     
-    def addChild(self,child:object):    
+    def setFormattedName(self,formatted_name:str) -> None:
+        self.formatted_name = formatted_name
+
+    def getFormattedName(self) -> str:
+        return self.formatted_name
+    
+    def addChild(self,child:object) -> None:    
         self.children.append(child)
     
     def getChildren(self) -> List[object]:
         return self.children
+
+    def getID(self) -> str:
+        if self.tmdb_id != "":
+            return self.tmdb_id
+        else:
+            return None
+        
+    def setID(self,id:str) -> None:
+        self.tmdb_id = id
     
 class Episode(FileObject):
     def __init__(self,name:str):
         super().__init__(name)
+        self.extension = ""
+        self.identifier_string = ""
+
+    def setExtension(self,extension:str) -> None:
+        self.extension = extension
+
+    def getExtension(self) -> str:
+        return self.extension
+    
+    def setIdentifierString(self,identifier_string:str) -> None:
+        self.identifier_string = identifier_string
+
+    def getIdentifierString(self) -> str:
+        return self.identifier_string
 
 class Season(FileObject):
     def __init__(self,name:str):
@@ -38,10 +70,20 @@ class Series(FileObject):
         return super().getChildren()
 # ------------------------- Classes ------------------------- //ERT
 class ERT:
-    def __init__(self,api_key:str, logging:bool = True):
+    def __init__(
+            self,api_key:str, 
+            local_series_data_path:str = "",
+            local_root_folder:str = "",
+            logging:bool = True, 
+            log_warning:bool = True, 
+            log_errors:bool = True
+            ):
         # main variables
         self.api_key:str = api_key
         self.base_url:str = 'https://api.themoviedb.org/3'
+        #filepaths
+        self.local_series_data_path:str = local_series_data_path
+        self.local_root_folder:str = local_root_folder
         #colors
         self.red:str = "\033[31m"
         self.green:str = "\033[32m"
@@ -59,13 +101,17 @@ class ERT:
         self.timestamp_color:str = self.grey
         self.warning_color:str = self.yellow
         self.error_color:str = self.red
-        self.logging:bool = True
+
+        self.logging:bool = logging
+        self.log_warning:bool = log_warning
+        self.log_errors:bool = log_errors
         self.log_list:List[str] = []
         self.warning_list:List[str] = []
         self.error_list:List[str] = []
         self.full_logs:List[str] = []
         #questionable_matches
         self.possibly_formatted_episodes:List[str] = []
+        self.failed_episode_formats:List[str] = []
 
         #class lists
         self.series_list:List[Series] = []
@@ -90,7 +136,7 @@ class ERT:
         line:str = f"[{self.error_color}{prefix}{self.reset}]:[{self.timestamp_color}{current_time}{self.reset}] {self.messsage_color}{message}{self.reset}"
         self.error_list.append(line)
         self.full_logs.append(line)
-        if self.logging:
+        if self.log_errors:
             print(line)
 
     def logWarning(self, message:str, prefix:str = "ERT Warning"):
@@ -99,7 +145,7 @@ class ERT:
         line:str = f"[{self.warning_color}{prefix}{self.reset}]:[{self.timestamp_color}{current_time}{self.reset}] {self.messsage_color}{message}{self.reset}"
         self.warning_list.append(line)
         self.full_logs.append(line)
-        if self.logging:
+        if self.log_warning:
             print(line)
     #--------- API CALLS --------------------------------------------------------------------------- API CALLS --------
     def getEpisodeNumber(self,series_name:str, season_number:str, episode_name:str)->int or None:
@@ -129,9 +175,28 @@ class ERT:
             self.logError(f"Error getting episode information for '{series_name}' in {season_number}: {e}")
             return None
     
+    def getSeriesID(self,item_name:str) -> int or None:
+        """Returns the ID of the Series with the given name"""
+        # Construct the search URL
+        search_url:str = f"{self.base_url}/search/tv?api_key={self.api_key}&query={item_name}"
+
+        # Make the search request
+        try:
+            response = requests.get(search_url).json()
+            item_id = response['results'][0]['id']  # Get the series ID
+            return item_id
+        except Exception as e:
+            self.logError(f"Error getting item ID for '{item_name}': {e}")
+            return None
+        
     #--------- STRING TOOLS ---------------------------------------------------------------- STRING TOOLS --------       
     def formatSeriesName(self,series_name:str) -> str:
         """Check series name for formatting issues.  Returns a formatted series name"""
+        #check if formatted string contains (year)
+        year_regex:str = r'\(\d{4}\)'
+        if regex.search(year_regex,series_name):
+            #remove (year)
+            series_name = regex.sub(year_regex,'',series_name)
         return self.cleanString(series_name)
     
     def formatSeasonName(self,season_name:str) -> str:
@@ -212,6 +277,8 @@ class ERT:
                 failed = True
         if failed:
             self.logError(f"Failed to split episode name '{episode_name}'")
+            self.failed_episode_formats.append(episode_name)
+            return None
         else:
             return data
 
@@ -235,7 +302,11 @@ class ERT:
         """Removes double spaces from a string"""
         return string.replace("  "," ")
     
-    def generateSeriesData(self,root_folder:str) -> True or False:
+    def generateLocalSeriesData(self) -> True or False:
+        """Generates a list of series objects from the local series data path.
+        Writes the results to the local series data path.
+        Returns True or False"""
+        root_folder:str = self.local_root_folder
         if not os.path.exists(root_folder):
             self.logError(f"Root folder '{root_folder}' does not exist")
             return False
@@ -247,37 +318,113 @@ class ERT:
         for series_folder in series_folders:
             #create a series object
             series:Series = Series(series_folder)
+            formatted_name:str = self.formatSeriesName(series_folder)
+            series.setFormattedName(formatted_name)
             #get the season folders
             season_folders:List[str] = os.listdir(os.path.join(root_folder,series_folder))
             #iterate the season folders
             for season_folder in season_folders:
                 #create a season object
                 season:Season = Season(season_folder)
+                formatted_name:str = self.formatSeasonName(season_folder)
+                season.setFormattedName(formatted_name)
                 #get the episode files
                 episode_files:List[str] = os.listdir(os.path.join(root_folder,series_folder,season_folder))
                 #iterate the episode files
                 for episode_file in episode_files:
                     #create an episode object
                     episode:Episode = Episode(episode_file)
+                    #split the episode name
+                    data:Dict[str,str] = self.formatEpisodeName(episode_file)
+                    if not data:
+                        self.logError(f"Failed to format episode name '{episode_file}'")
+                        continue
+                    formatted_name:str = data["name"]
+                    extension:str = data["extension"]
+                    episode.setFormattedName(formatted_name)
+                    episode.setExtension(extension)
                     #add the episode to the season
                     season.addChild(episode)
                 #add the season to the series
                 series.addChild(season)
             #add the series to the series list
             series_list.append(series)
+        #set the series list
         self.series_list.clear()
         self.series_list = series_list
+        #write the series list to the local series data path
+        self.writeLocalSeriesData()
         return True
     
-    def TESTING(self,root_folder:str):
-        print(f"TESTING: against {root_folder}")
-        self.generateSeriesData(root_folder)
+    def loadLocalSeriesData(self) -> bool:
+        if not os.path.exists(self.local_series_data_path):
+            self.logError(f"Local series data file '{self.local_series_data_path}' does not exist")
+            return False
+        with open(self.local_series_data_path,"rb") as file:
+            self.series_list = pickle.load(file)
+        if len(self.series_list) == 0:
+            self.logError(f"Failed to load local series data from '{self.local_series_data_path}'")
+            return False
+        return True
+
+    def writeLocalSeriesData(self) -> bool:
+        if len(self.series_list) == 0:
+            self.logError("No series data to write")
+            return False
+        if os.path.exists(self.local_series_data_path):
+            self.logWarning(f"Overwriting existing local series data at '{self.local_series_data_path}'")
+            os.remove(self.local_series_data_path)
+        with open(self.local_series_data_path,"wb") as file:
+            pickle.dump(self.series_list,file)
+        if os.path.exists(self.local_series_data_path):
+            return True
+        else:
+            self.logError(f"Failed to write local series data to '{self.local_series_data_path}'")
+            return False
+        
+    def updateLocalSeriesData(self,force_scan:bool = False) -> bool:
+        if not force_scan:
+            if self.loadLocalSeriesData():
+                return True
+            else:
+                self.generateLocalSeriesData()
+                return True
+        else:
+            return self.generateLocalSeriesData()
+        
+    def run(self,force_scan:bool = False) -> bool:
+        #generate local series data
+        if not self.updateLocalSeriesData(force_scan):
+            self.logError("Failed to generate local series data")
+            return False
+        #iterate the series
         for series in self.series_list:
             series_name:str = series.getName()
+            #format the series name
             formatted_series_name:str = self.formatSeriesName(series_name)
-            print(f"{series_name} -> {formatted_series_name}")
-            # TODO add functions to get the series season count from API
-            # check that series names all are valid for the API
+            if formatted_series_name != series_name:
+                self.logWarning(f"Series '{series_name}' formatted to '{formatted_series_name}'")
+            #get the series ID
+            series_id:int = series.getID()
+            if not series_id:
+                series_id:int = self.getSeriesID(formatted_series_name)
+                if series_id:
+                    self.log(f"API call for '{formatted_series_name}' has returned ID {series_id}")
+                    series.setID(series_id)
+                else:
+                    self.logError(f"Failed to get series ID for '{formatted_series_name}'")
+            else:
+                self.log(f"Loaded ID for Series '{formatted_series_name}': {series_id}")
+        #write the updated series objects
+        self.writeLocalSeriesData()
+        #log the failed episode formats
+        if len(self.failed_episode_formats) == 0:
+            self.log(f"All episode names were formatted/split successfully")
+        else:
+            self.log(f"The following {len(self.failed_episode_formats)} episode names failed to be format/split:")
+            for episode_name in self.failed_episode_formats:
+                self.log(f"\t{episode_name}")
+        return True
 
 
 def loadAPI():
@@ -285,14 +432,19 @@ def loadAPI():
         api_key = file.read().strip()
     return api_key
     
-#if name = main for testing
+# ------------------------- Main ------------------------- //MAIN
+local_series_data_path:str = os.path.join(os.getcwd(),"ERT data","local_series_data.pkl")
+local_tv_root_folder_path:str = os.path.join(os.getcwd(),"tv shows")
+logging:bool = True
+log_warning:bool = True
+log_errors:bool = True
 if __name__ == "__main__":
     import os
     api_key:str = loadAPI()
     folder_path = os.path.join(os.getcwd(),"tv shows")
 
-    ert:ERT = ERT(api_key)
-    ert.TESTING(folder_path)
+    ert:ERT = ERT(api_key,local_series_data_path,local_tv_root_folder_path,logging,log_warning,log_errors)
+    ert.run(True)
 
 
 
