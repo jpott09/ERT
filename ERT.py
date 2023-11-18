@@ -277,7 +277,6 @@ class ERT:
                 failed = True
         if failed:
             self.logError(f"Failed to split episode name '{episode_name}'")
-            self.failed_episode_formats.append(episode_name)
             return None
         else:
             return data
