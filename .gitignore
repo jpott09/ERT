@@ -1,4 +1,9 @@
 tv shows/
 api_key.txt
-ERT data/
 z_test_calls.py
+ERT copy.py
+test files/
+local_series_data.pkl
+tmdb_data.pkl
+database.db
+__pycache__/

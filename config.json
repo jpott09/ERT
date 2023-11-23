@@ -1,0 +1,9 @@
+{
+    "comment_root_tv_folder": "The root folder for TV shows. This is where the TV shows are be stored.",
+    "comment_root_tv_folder_2": "if your shows are at C:/tv shows/[series name]/[season]/[episode] then you would set this to 'C:/tv shows/",
+    "root_series_folder": "C:/Users/jpott/Documents/python/JELLYPWN/DMS/ERT/tv shows/",
+
+    "comment_TMDB_api_key": "Your API key from TMDB. You can get one from https://www.themoviedb.org/settings/api",
+    "tmdb_api_key": ""
+
+}
