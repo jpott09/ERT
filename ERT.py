@@ -22,12 +22,10 @@ class ERT(LoggableClass):
     def __init__(self,database:Database, tmdb_api_key:str):
         #super init
         super().__init__("ERT","ERT ERR","ERT WRN")
-        #database stuff
-        self.database:Database = database
         #tmdb stuff
         self.tmdb_api_key:str = tmdb_api_key
-        #load TMDB 
-        tmdb = TMDBManager(self.database, tmdb_api_key)
+        self.database:Database = database #probably only need for TMDB
+        self.tmdb = TMDBManager(self.database, tmdb_api_key)
         #init Local Scraper Tool
-        self.lst = LST()
+        self.lst:LST = LST()
         self.local_series_data:List[Series] = self.lst.getData()
